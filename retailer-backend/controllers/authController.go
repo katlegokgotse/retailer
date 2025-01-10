@@ -7,7 +7,7 @@ import (
 	"main.go/models"
 )
 
-func getUser(context *gin.Context, users *models.User) {
+func getUsers(context *gin.Context, users *models.User) {
 	context.IndentedJSON(http.StatusOK, users)
 }
 func loginUser(context *gin.Context, users *models.User) {
