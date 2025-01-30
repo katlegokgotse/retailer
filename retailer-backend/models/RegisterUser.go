@@ -2,10 +2,10 @@ package usecases
 
 import (
 	"errors"
-	"retailer-backend/entities"
-	"retailer-backend/interface_adapters/repositories"
 
 	"golang.org/x/crypto/bcrypt"
+	"main.go/entities"
+	"main.go/interface_adapters/repositories"
 )
 
 type RegisterUser struct {

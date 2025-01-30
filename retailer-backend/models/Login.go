@@ -2,9 +2,10 @@ package usecases
 
 import (
 	"errors"
-	"retailer-backend/entities"
-	"retailer-backend/interface_adapters/repositories"
 	"time"
+
+	"main.go/entities"
+	"main.go/interface_adapters/repositories"
 
 	"github.com/dgrijalva/jwt-go"
 	"golang.org/x/crypto/bcrypt"

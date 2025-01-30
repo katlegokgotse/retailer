@@ -3,11 +3,12 @@ package main
 
 import (
 	"net/http"
-	"retailer-backend/entities"
-	"retailer-backend/interface_adapters/controllers"
-	"retailer-backend/interface_adapters/repositories"
-	"retailer-backend/models"
 	"time"
+
+	"main.go/controllers"
+	"main.go/entities"
+	"main.go/interface_adapters/repositories"
+	"main.go/models"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-contrib/cors"
