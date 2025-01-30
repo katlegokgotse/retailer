@@ -27,7 +27,7 @@ func (l *LoginUser) Execute(user entities.User) (string, error) {
 	}
 
 	expirationTime := time.Now().Add(5 * time.Minute)
-	claims := &entities.Claims{
+	claims := &entities.User.Claims{
 		Username: user.Username,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
