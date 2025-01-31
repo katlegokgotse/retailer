@@ -71,6 +71,7 @@ func main() {
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
+		AllowOriginFunc:  func(origin string) bool { return true },
 		MaxAge:           12 * time.Hour,
 	}))
 
