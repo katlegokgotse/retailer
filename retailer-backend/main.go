@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -17,6 +18,11 @@ import (
 
 var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY")) // Ensure this is set in environment variables
 var db *pgxpool.Pool
+var jwtPool = sync.Pool{
+	New: func() interface{} {
+		return jwt.New(jwt.SigningMethodHS256)
+	},
+}
 
 type User struct {
 	Username string `json:"username"`
@@ -151,7 +157,10 @@ func main() {
 		}
 
 		var storedPassword string
-		err := db.QueryRow(context.Background(), "SELECT password FROM users WHERE username=$1", user.Username).Scan(&storedPassword)
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond) // Timeout to prevent slow queries
+		defer cancel()
+
+		err := db.QueryRow(ctx, "SELECT password FROM users WHERE username=$1", user.Username).Scan(&storedPassword)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 			return
@@ -162,6 +171,7 @@ func main() {
 			return
 		}
 
+		// Generate JWT with optimized memory management
 		expirationTime := time.Now().Add(15 * time.Minute)
 		claims := &Claims{
 			Username: user.Username,
@@ -170,8 +180,11 @@ func main() {
 			},
 		}
 
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		token := jwtPool.Get().(*jwt.Token)
+		token.Claims = claims
 		tokenString, err := token.SignedString(jwtKey)
+		jwtPool.Put(token) // Reuse the token object
+
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
 			return
