@@ -198,7 +198,7 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{"message": "Welcome " + claims.Username})
 	})
-	r.POST("/", func(c *gin.Context) {
+	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Hello"})
 	})
 	r.Run(":8080")
