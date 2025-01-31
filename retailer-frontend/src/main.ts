@@ -78,7 +78,7 @@ authForm?.addEventListener('submit', async (event) => {
 
   const endpoint = isLogin ? "/login" : "/register";
   try {
-    const response = await fetch(`http://localhost:8080${endpoint}`, {
+    const response = await fetch(`https://retailer-x9lq.onrender.com/${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
