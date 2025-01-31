@@ -134,7 +134,7 @@ func main() {
 		}
 
 		// Hash the password
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), 10)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not hash password"})
 			return
