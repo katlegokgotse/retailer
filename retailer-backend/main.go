@@ -1,19 +1,22 @@
 package main
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
-
-	"os"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtKey = []byte(os.Getenv("my_secret_key"))
+var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY")) // Ensure this is set in environment variables
+var db *pgxpool.Pool
 
 type User struct {
 	Username string `json:"username"`
@@ -25,26 +28,59 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-var users = map[string]string{}
+func initDB() {
+	dbURL := os.Getenv("DATABASE_URL") // Ensure this is set in environment variables
+
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL is not set")
+	}
+
+	// Create a new connection pool
+	var err error
+	db, err = pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		log.Fatalf("Unable to connect to database: %v", err)
+	}
+
+	// Ensure the table exists
+	_, err = db.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS users (
+			id SERIAL PRIMARY KEY,
+			username TEXT UNIQUE NOT NULL,
+			password TEXT NOT NULL
+		);
+	`)
+	if err != nil {
+		log.Fatalf("Error creating users table: %v", err)
+	}
+
+	log.Println("Connected to PostgreSQL")
+}
 
 func main() {
+	initDB()         // Initialize database
+	defer db.Close() // Ensure database connection is closed on exit
+
 	r := gin.Default()
 
 	// Enable CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // Allow your React app's origin
+		AllowOrigins:     []string{"http://localhost:5173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
 	r.POST("/refresh", func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization token"})
 			return
 		}
+
+		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
@@ -70,7 +106,6 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"token": tokenString})
 	})
 
-	// Register a new user
 	r.POST("/register", func(c *gin.Context) {
 		var user User
 		if err := c.ShouldBindJSON(&user); err != nil {
@@ -79,7 +114,13 @@ func main() {
 		}
 
 		// Check if the user already exists
-		if _, exists := users[user.Username]; exists {
+		var exists bool
+		err := db.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)", user.Username).Scan(&exists)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+		if exists {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Username already exists"})
 			return
 		}
@@ -91,12 +132,15 @@ func main() {
 			return
 		}
 
-		// Store the user
-		users[user.Username] = string(hashedPassword)
+		_, err = db.Exec(context.Background(), "INSERT INTO users (username, password) VALUES ($1, $2)", user.Username, string(hashedPassword))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not register user"})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 	})
 
-	// Login and generate a JWT
 	r.POST("/login", func(c *gin.Context) {
 		var user User
 		if err := c.ShouldBindJSON(&user); err != nil {
@@ -104,8 +148,9 @@ func main() {
 			return
 		}
 
-		storedPassword, exists := users[user.Username]
-		if !exists {
+		var storedPassword string
+		err := db.QueryRow(context.Background(), "SELECT password FROM users WHERE username=$1", user.Username).Scan(&storedPassword)
+		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 			return
 		}
@@ -115,7 +160,7 @@ func main() {
 			return
 		}
 
-		expirationTime := time.Now().Add(5 * time.Minute)
+		expirationTime := time.Now().Add(15 * time.Minute)
 		claims := &Claims{
 			Username: user.Username,
 			StandardClaims: jwt.StandardClaims{
@@ -133,13 +178,13 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"token": tokenString})
 	})
 
-	// Protected route
 	r.GET("/protected", func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")
 		if tokenString == "" || !strings.HasPrefix(tokenString, "Bearer ") {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization token"})
 			return
 		}
+
 		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
